@@ -549,3 +549,17 @@ proof: `vp fmt --check` passed across twenty-seven current design, interaction, 
 proof: Focused semantic audit found no remaining impossible P4 late-success wording or nonexistent `workflow_run` queued action. It confirmed failure redelivery, requested/queued distinction, run-attempt correlation, non-authoritative workflow control, invalid-signature rejection, OAuth `403`, explicit receive-pack lease, blocked P6 status, and P10 ancestry rejection.
 
 final_status: Three independent Opus review rounds and Codex reconciliation validate the prescribed API/interaction contract. All critical/bug/design findings were corrected or rejected with protocol evidence; intentionally unresolved product decisions are named and block only their dependent scenarios. No application code was changed.
+
+## Publication To Independent Repository
+
+user_goal: Put every validation/design artifact created during this session into a separate repository and publish it as `tylergannon/merger-herder-validation`.
+
+decision: Created a clean sibling repository at `/Users/tyler/src/merger-herder-validation` without modifying or removing the source artifacts from MergeHerder. It contains the three root contracts, fourteen per-scenario traces, all three consensus prompts/reviews, final reconciliation, this worklog, a focused README, and an MIT license.
+
+skill_use: repo-proof-policy source=pagerguild/core-tools -> verified root routing, twenty-seven Markdown files, all relative links, fourteen indexed scenarios, three review rounds plus prompts, source-copy identity, formatter compliance, and staged whitespace before publication.
+
+tool_note: `vp fmt --check` could not run with the new docs-only repository as its working directory because it is not a Vite+ workspace. Running MergeHerder's configured Vite+ formatter against the new repository's absolute file paths passed all twenty-seven Markdown files.
+
+proof: GitHub repository creation and initial push succeeded; the repository is public with default branch `main`, and GitHub reported all fourteen scenario files. The initial local and remote heads both resolved to `854b9e1a9d1edc28b2585da49bcd6b1640d069ac` before this publication-closeout update.
+
+status: Independent validation repository published at `https://github.com/tylergannon/merger-herder-validation`. A final closeout commit will include this publication record.
