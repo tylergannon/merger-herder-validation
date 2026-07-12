@@ -61,6 +61,10 @@ The next completed slice, [`docs/p1-ref-events-proof.md`](./docs/p1-ref-events-p
 proves required ref transitions and derives pending push/workflow state from
 real receive-pack results.
 
+[`docs/p1-webhook-lifecycle-proof.md`](./docs/p1-webhook-lifecycle-proof.md)
+proves signed delivery, redelivery/duplication, caller-controlled order, and
+workflow lifecycle through completion.
+
 Progress toward that complete environment is tracked in
 [`ephemeral/P1_ENVIRONMENT_ROADMAP.md`](./ephemeral/P1_ENVIRONMENT_ROADMAP.md).
 

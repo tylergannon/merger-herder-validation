@@ -67,18 +67,22 @@ Evidence:
 
 ## 2. Webhook Delivery And CI Lifecycle
 
-- [ ] Separate event creation from delivery.
-- [ ] List pending and attempted deliveries through control.
-- [ ] Deliver signed immutable `push` and `workflow_run` payloads to a configured
+- [x] Separate event creation from delivery.
+- [x] List pending and attempted deliveries through control.
+- [x] Deliver signed immutable `push` and `workflow_run` payloads to a configured
       receiver.
-- [ ] Preserve GUID and raw body on redelivery; create a new GUID for semantic
+- [x] Preserve GUID and raw body on redelivery; create a new GUID for semantic
       duplicates.
-- [ ] Allow delivery withholding, reordering, duplication, and deliberate
+- [x] Allow delivery withholding, reordering, duplication, and deliberate
       signature failure.
-- [ ] Move authoritative runs through queued, in-progress, and completed states.
-- [ ] Emit `workflow_run` actions `requested`, `in_progress`, and `completed`
+- [x] Move authoritative runs through queued, in-progress, and completed states.
+- [x] Emit `workflow_run` actions `requested`, `in_progress`, and `completed`
       with exact workflow, run, attempt, branch, and SHA identity.
-- [ ] Prove `CI-01`, `CI-02`, and `HOOK-06` across real HTTP delivery.
+- [x] Prove `CI-01`, `CI-02`, and `HOOK-06` across real HTTP delivery.
+
+Evidence:
+
+- [`docs/p1-webhook-lifecycle-proof.md`](../docs/p1-webhook-lifecycle-proof.md)
 
 ## 3. Cancellation And Workflow Execution
 

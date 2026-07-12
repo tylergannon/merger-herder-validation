@@ -56,6 +56,7 @@ type world struct {
 	workflowRuns      []WorkflowRun
 	pendingEvents     []PendingEvent
 	observationErrors []ObservationError
+	deliveryAttempts  []DeliveryAttempt
 	nextRunID         int64
 	nextEventID       uint64
 	unsupported       []UnsupportedRequest
@@ -63,8 +64,10 @@ type world struct {
 }
 
 type app struct {
-	id        int64
-	publicKey *rsa.PublicKey
+	id            int64
+	publicKey     *rsa.PublicKey
+	webhookURL    string
+	webhookSecret string
 }
 
 type installation struct {
@@ -131,6 +134,15 @@ type ObservationError struct {
 	At           time.Time `json:"at"`
 }
 
+type DeliveryAttempt struct {
+	GUID             string    `json:"guid"`
+	Destination      string    `json:"destination"`
+	StatusCode       int       `json:"status_code"`
+	InvalidSignature bool      `json:"invalid_signature"`
+	AttemptedAt      time.Time `json:"attempted_at"`
+	Error            string    `json:"error,omitempty"`
+}
+
 type WorkflowRun struct {
 	ID           int64  `json:"id"`
 	Attempt      int    `json:"run_attempt"`
@@ -152,8 +164,10 @@ type UnsupportedRequest struct {
 }
 
 type AppInput struct {
-	ID           int64  `json:"id"`
-	PublicKeyPEM string `json:"public_key_pem"`
+	ID            int64  `json:"id"`
+	PublicKeyPEM  string `json:"public_key_pem"`
+	WebhookURL    string `json:"webhook_url,omitempty"`
+	WebhookSecret string `json:"webhook_secret,omitempty"`
 }
 
 type InstallationInput struct {
@@ -197,6 +211,21 @@ type WorkflowInput struct {
 	ReleaseRef   string `json:"release_ref"`
 }
 
+type DeliveryInput struct {
+	GUID             string `json:"guid"`
+	InvalidSignature bool   `json:"invalid_signature"`
+}
+
+type DuplicateEventInput struct {
+	GUID string `json:"guid"`
+}
+
+type WorkflowTransitionInput struct {
+	RunID      int64  `json:"run_id"`
+	Status     string `json:"status"`
+	Conclusion string `json:"conclusion,omitempty"`
+}
+
 type StateSnapshot struct {
 	Now                 time.Time            `json:"now"`
 	Apps                int                  `json:"apps"`
@@ -209,4 +238,5 @@ type StateSnapshot struct {
 	PendingEvents       []PendingEvent       `json:"pending_events"`
 	WorkflowRuns        []WorkflowRun        `json:"workflow_runs"`
 	ObservationErrors   []ObservationError   `json:"observation_errors"`
+	DeliveryAttempts    []DeliveryAttempt    `json:"delivery_attempts"`
 }
