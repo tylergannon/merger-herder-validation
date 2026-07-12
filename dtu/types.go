@@ -1,0 +1,155 @@
+package dtu
+
+import (
+	"context"
+	"crypto/rsa"
+	"net/http"
+	"net/url"
+	"sync"
+	"time"
+)
+
+const tokenLifetime = time.Hour
+
+type Config struct {
+	PublicAddress  string
+	ControlAddress string
+	DataDir        string
+	InitialTime    time.Time
+}
+
+type Instance struct {
+	GitHubURL  url.URL
+	GitURL     url.URL
+	ControlURL url.URL
+	runtime    *instanceRuntime
+}
+
+type instanceRuntime struct {
+	publicServer  http.Server
+	controlServer http.Server
+	done          chan error
+	removeDataDir bool
+	dataDir       string
+	closeOnce     sync.Once
+	closeErr      error
+}
+
+func (i Instance) Close(ctx context.Context) error {
+	return i.runtime.close(ctx)
+}
+
+type world struct {
+	mu           sync.RWMutex
+	now          time.Time
+	dataDir      string
+	gitBackend   string
+	apps         map[int64]app
+	installs     map[int64]installation
+	repositories map[int64]repository
+	repoNames    map[string]int64
+	pulls        map[pullKey]pullRequest
+	tokens       map[string]installationToken
+	unsupported  []UnsupportedRequest
+	mutations    uint64
+}
+
+type app struct {
+	id        int64
+	publicKey *rsa.PublicKey
+}
+
+type installation struct {
+	id            int64
+	appID         int64
+	active        bool
+	permissions   map[string]string
+	repositoryIDs map[int64]struct{}
+}
+
+type repository struct {
+	id             int64
+	owner          string
+	name           string
+	installationID int64
+	gitDir         string
+}
+
+type pullKey struct {
+	repositoryID int64
+	number       int
+}
+
+type pullRequest struct {
+	repositoryID int64
+	number       int
+	baseRef      string
+	headRef      string
+	baseSHA      string
+	headSHA      string
+	state        string
+	draft        bool
+}
+
+type installationToken struct {
+	value          string
+	installationID int64
+	repositoryIDs  map[int64]struct{}
+	permissions    map[string]string
+	expiresAt      time.Time
+}
+
+type UnsupportedRequest struct {
+	Method string    `json:"method"`
+	Path   string    `json:"path"`
+	At     time.Time `json:"at"`
+}
+
+type AppInput struct {
+	ID           int64  `json:"id"`
+	PublicKeyPEM string `json:"public_key_pem"`
+}
+
+type InstallationInput struct {
+	ID          int64             `json:"id"`
+	AppID       int64             `json:"app_id"`
+	Active      bool              `json:"active"`
+	Permissions map[string]string `json:"permissions"`
+}
+
+type RepositoryInput struct {
+	ID             int64  `json:"id"`
+	Owner          string `json:"owner"`
+	Name           string `json:"name"`
+	InstallationID int64  `json:"installation_id"`
+}
+
+type PullRequestInput struct {
+	RepositoryID int64  `json:"repository_id"`
+	Number       int    `json:"number"`
+	BaseRef      string `json:"base_ref"`
+	HeadRef      string `json:"head_ref"`
+	State        string `json:"state"`
+	Draft        bool   `json:"draft"`
+}
+
+type PullRequestStateInput struct {
+	RepositoryID int64  `json:"repository_id"`
+	Number       int    `json:"number"`
+	State        string `json:"state"`
+}
+
+type AdvanceTimeInput struct {
+	Duration string `json:"duration"`
+}
+
+type StateSnapshot struct {
+	Now                 time.Time            `json:"now"`
+	Apps                int                  `json:"apps"`
+	Installations       int                  `json:"installations"`
+	Repositories        int                  `json:"repositories"`
+	PullRequests        int                  `json:"pull_requests"`
+	Tokens              int                  `json:"tokens"`
+	Mutations           uint64               `json:"mutations"`
+	UnsupportedRequests []UnsupportedRequest `json:"unsupported_requests"`
+}
