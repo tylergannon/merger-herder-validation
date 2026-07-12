@@ -17,6 +17,8 @@ internal implementation.
   observation interactions.
 - [`GITHUB_SERVICE_CONTRACT.md`](./GITHUB_SERVICE_CONTRACT.md) inventories the
   exact GitHub behavior on which those scenarios depend.
+- [`docs/api-endpoint-claims.md`](./docs/api-endpoint-claims.md) defines the
+  executable correctness claims for the P1 REST endpoints.
 - [`DTU_GITHUB_SPEC.md`](./DTU_GITHUB_SPEC.md) is a downstream infrastructure
   draft. It is subordinate to the scenarios and may be reduced or replaced as
   implementation begins.
