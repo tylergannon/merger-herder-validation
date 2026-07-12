@@ -65,6 +65,9 @@ real receive-pack results.
 proves signed delivery, redelivery/duplication, caller-controlled order, and
 workflow lifecycle through completion.
 
+[`docs/p1-cancellation-proof.md`](./docs/p1-cancellation-proof.md) proves the
+scripted Actions cancellation and completion races used by Pause scenarios.
+
 Progress toward that complete environment is tracked in
 [`ephemeral/P1_ENVIRONMENT_ROADMAP.md`](./ephemeral/P1_ENVIRONMENT_ROADMAP.md).
 

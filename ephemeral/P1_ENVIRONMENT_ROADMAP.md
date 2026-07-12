@@ -86,12 +86,16 @@ Evidence:
 
 ## 3. Cancellation And Workflow Execution
 
-- [ ] Implement `CI-03` Actions run cancellation with asynchronous acceptance.
-- [ ] Script cancellation/completion races used by Pause scenarios.
+- [x] Implement `CI-03` Actions run cancellation with asynchronous acceptance.
+- [x] Script cancellation/completion races used by Pause scenarios.
 - [ ] Execute the configured repository workflow through pinned `act` and
       Docker for authoritative happy-path CI.
 - [ ] Bind checkout, run state, logs, and conclusion to the exact release SHA.
-- [ ] Keep scripted mode for cancellation semantics that `act` cannot reproduce.
+- [x] Keep scripted mode for cancellation semantics that `act` cannot reproduce.
+
+Scripted cancellation evidence:
+
+- [`docs/p1-cancellation-proof.md`](../docs/p1-cancellation-proof.md)
 
 ## 4. MergeHerder P1 System Harness
 

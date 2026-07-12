@@ -34,12 +34,63 @@ func (w *world) publicHandler() http.Handler {
 				return
 			}
 			w.getPullRequest(response, request, parts[1], parts[2], parts[4])
+		case len(parts) == 7 && parts[0] == "repos" && parts[3] == "actions" && parts[4] == "runs" && parts[6] == "cancel":
+			if request.Method != http.MethodPost {
+				w.handleUnsupported(response, request)
+				return
+			}
+			w.cancelWorkflowRun(response, request, parts[1], parts[2], parts[5])
 		case isGitPath(parts):
 			w.serveGit(response, request, parts)
 		default:
 			w.handleUnsupported(response, request)
 		}
 	})
+}
+
+func (w *world) cancelWorkflowRun(response http.ResponseWriter, request *http.Request, owner, name, rawRunID string) {
+	runID, err := strconv.ParseInt(rawRunID, 10, 64)
+	if err != nil {
+		writeError(response, http.StatusNotFound, "Not Found")
+		return
+	}
+	token, authOK := w.authenticateInstallationToken(request)
+	if !authOK {
+		writeError(response, http.StatusUnauthorized, "Bad credentials")
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	repositoryID, found := w.repoNames[repoName(owner, name)]
+	if !found {
+		writeError(response, http.StatusNotFound, "Not Found")
+		return
+	}
+	if _, allowed := token.repositoryIDs[repositoryID]; !allowed || permissionRank(token.permissions["actions"]) < permissionRank("write") {
+		writeError(response, http.StatusNotFound, "Not Found")
+		return
+	}
+	index := -1
+	for candidate := range w.workflowRuns {
+		if w.workflowRuns[candidate].ID == runID && w.workflowRuns[candidate].RepositoryID == repositoryID {
+			index = candidate
+			break
+		}
+	}
+	if index < 0 {
+		writeError(response, http.StatusNotFound, "Not Found")
+		return
+	}
+	if w.workflowRuns[index].Status == "completed" {
+		writeError(response, http.StatusConflict, "Cannot cancel a completed workflow run")
+		return
+	}
+	run := w.workflowRuns[index]
+	run.CancellationRequested = true
+	w.workflowRuns[index] = run
+	w.mutations++
+	response.Header().Set("X-GitHub-Request-Id", "DTU")
+	response.WriteHeader(http.StatusAccepted)
 }
 
 func (w *world) createInstallationToken(response http.ResponseWriter, request *http.Request, rawID string) {

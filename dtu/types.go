@@ -144,17 +144,18 @@ type DeliveryAttempt struct {
 }
 
 type WorkflowRun struct {
-	ID           int64  `json:"id"`
-	Attempt      int    `json:"run_attempt"`
-	RepositoryID int64  `json:"repository_id"`
-	WorkflowID   int64  `json:"workflow_id"`
-	WorkflowName string `json:"workflow_name"`
-	WorkflowPath string `json:"workflow_path"`
-	Event        string `json:"event"`
-	HeadBranch   string `json:"head_branch"`
-	HeadSHA      string `json:"head_sha"`
-	Status       string `json:"status"`
-	Conclusion   string `json:"conclusion,omitempty"`
+	ID                    int64  `json:"id"`
+	Attempt               int    `json:"run_attempt"`
+	RepositoryID          int64  `json:"repository_id"`
+	WorkflowID            int64  `json:"workflow_id"`
+	WorkflowName          string `json:"workflow_name"`
+	WorkflowPath          string `json:"workflow_path"`
+	Event                 string `json:"event"`
+	HeadBranch            string `json:"head_branch"`
+	HeadSHA               string `json:"head_sha"`
+	Status                string `json:"status"`
+	Conclusion            string `json:"conclusion,omitempty"`
+	CancellationRequested bool   `json:"cancellation_requested"`
 }
 
 type UnsupportedRequest struct {
