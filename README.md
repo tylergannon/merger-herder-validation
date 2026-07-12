@@ -36,20 +36,26 @@ Codex reconciliation:
 The full product-design history is retained in
 [`ephemeral/worklog/202607101222-merge-queue-domain-seams.md`](./ephemeral/worklog/202607101222-merge-queue-domain-seams.md).
 
-## Proposed Implementation Direction
+## Executable P1 API Proof
 
-The current recommendation for the future proof runtime is:
+The repository now contains the first executable DTU GitHub slice:
 
-- Go with `net/http`;
-- `libopenapi` over a mechanically selected subset of GitHub's upstream OpenAPI
-  document;
-- `google/go-github` request, response, and webhook types;
-- real Git smart HTTP through `git-http-backend`;
-- pinned `act` and Docker for real workflow execution; and
-- a tiny latest-Octokit conformance client for the named live-GitHub contracts.
+- `cmd/dtu-github` starts isolated public and test-control HTTP listeners;
+- `dtu` implements App JWT validation, installation-token creation, targeted PR
+  reads, controllable time, and explicit unsupported-request diagnostics;
+- real bare repositories are served through `git-http-backend`; and
+- the proof suite uses `google/go-github`, raw HTTP, the Git CLI, and an actual
+  server subprocess across real loopback listeners.
 
-This repository currently contains specifications and review evidence, not the
-proof-tool implementation.
+Run the proof with:
+
+```sh
+go test -race ./...
+```
+
+See [`docs/p1-api-proof.md`](./docs/p1-api-proof.md) for the tested journey,
+claim coverage, and remaining proof boundaries. Live-GitHub conformance and the
+full MergeHerder P1 system scenario remain separate required layers.
 
 ## License
 
