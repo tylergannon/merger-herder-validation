@@ -70,11 +70,13 @@ func Start(config Config) (Instance, error) {
 		workflows:    make(map[int64]workflowConfig),
 		receiveLocks: make(map[int64]*sync.Mutex),
 		nextRunID:    1000,
+		activeRuns:   make(map[int64]activeRun),
 	}
 
 	runtime := &instanceRuntime{
 		publicServer:  http.Server{Handler: w.publicHandler()},
 		controlServer: http.Server{Handler: w.controlHandler()},
+		world:         w,
 		done:          make(chan error, 2),
 		removeDataDir: removeDataDir,
 		dataDir:       dataDir,
@@ -117,12 +119,14 @@ func serve(done chan<- error, server *http.Server, listener net.Listener) {
 
 func (r *instanceRuntime) close(ctx context.Context) error {
 	r.closeOnce.Do(func() {
+		r.world.stopActiveRuns(false)
 		publicErr := r.publicServer.Shutdown(ctx)
 		controlErr := r.controlServer.Shutdown(ctx)
 		if publicErr != nil {
 			_ = r.publicServer.Close()
 		}
 		if controlErr != nil {
+			r.world.stopActiveRuns(true)
 			_ = r.controlServer.Close()
 		}
 		serveErr1 := <-r.done
@@ -133,4 +137,24 @@ func (r *instanceRuntime) close(ctx context.Context) error {
 		r.closeErr = errors.Join(publicErr, controlErr, serveErr1, serveErr2)
 	})
 	return r.closeErr
+}
+
+func (w *world) stopActiveRuns(force bool) {
+	w.mu.RLock()
+	runs := make(map[int64]*exec.Cmd, len(w.activeRuns))
+	for runID, active := range w.activeRuns {
+		if active.command != nil && active.command.Process != nil {
+			runs[runID] = active.command
+		}
+	}
+	w.mu.RUnlock()
+	for runID, command := range runs {
+		if force {
+			_ = command.Process.Kill()
+			w.cleanupRunContainers(runID)
+			continue
+		}
+		_ = command.Process.Signal(os.Interrupt)
+		w.cleanupRunContainers(runID)
+	}
 }

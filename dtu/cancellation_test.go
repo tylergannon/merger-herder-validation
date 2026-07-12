@@ -65,6 +65,17 @@ func TestWorkflowCancellationRaces(t *testing.T) {
 
 	response, err = client.Actions.CancelWorkflowRunByID(t.Context(), "Acme", "widget", 999999)
 	assertGitHubError(t, err, response, http.StatusNotFound)
+	response, err = githubClient(instance.GitHubURL, "invalid-token").Actions.CancelWorkflowRunByID(t.Context(), "Acme", "widget", secondRun.ID)
+	assertGitHubError(t, err, response, http.StatusUnauthorized)
+	must(t, control.CreateRepository(t.Context(), dtu.RepositoryInput{ID: 101, Owner: "Acme", Name: "other", InstallationID: 10}))
+	otherRepo, _, err := appClient.Apps.CreateInstallationToken(t.Context(), 10, &github.InstallationTokenOptions{
+		RepositoryIDs: []int64{101}, Permissions: &github.InstallationPermissions{Actions: new("write")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = githubClient(instance.GitHubURL, otherRepo.GetToken()).Actions.CancelWorkflowRunByID(t.Context(), "Acme", "widget", secondRun.ID)
+	assertGitHubError(t, err, response, http.StatusNotFound)
 	noActions, _, err := appClient.Apps.CreateInstallationToken(t.Context(), 10, &github.InstallationTokenOptions{
 		RepositoryIDs: []int64{100}, Permissions: &github.InstallationPermissions{Contents: new("write")},
 	})

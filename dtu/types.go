@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"sync"
 	"time"
 )
@@ -29,6 +30,7 @@ type Instance struct {
 type instanceRuntime struct {
 	publicServer  http.Server
 	controlServer http.Server
+	world         *world
 	done          chan error
 	removeDataDir bool
 	dataDir       string
@@ -57,6 +59,7 @@ type world struct {
 	pendingEvents     []PendingEvent
 	observationErrors []ObservationError
 	deliveryAttempts  []DeliveryAttempt
+	activeRuns        map[int64]activeRun
 	nextRunID         int64
 	nextEventID       uint64
 	unsupported       []UnsupportedRequest
@@ -118,6 +121,11 @@ type workflowConfig struct {
 	releaseRef   string
 }
 
+type activeRun struct {
+	command               *exec.Cmd
+	cancellationSignalled bool
+}
+
 type PendingEvent struct {
 	GUID         string          `json:"guid"`
 	Event        string          `json:"event"`
@@ -156,6 +164,7 @@ type WorkflowRun struct {
 	Status                string `json:"status"`
 	Conclusion            string `json:"conclusion,omitempty"`
 	CancellationRequested bool   `json:"cancellation_requested"`
+	Logs                  string `json:"logs,omitempty"`
 }
 
 type UnsupportedRequest struct {
@@ -225,6 +234,10 @@ type WorkflowTransitionInput struct {
 	RunID      int64  `json:"run_id"`
 	Status     string `json:"status"`
 	Conclusion string `json:"conclusion,omitempty"`
+}
+
+type ExecuteWorkflowInput struct {
+	RunID int64 `json:"run_id"`
 }
 
 type StateSnapshot struct {

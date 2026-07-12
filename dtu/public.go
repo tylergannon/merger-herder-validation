@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -60,13 +61,14 @@ func (w *world) cancelWorkflowRun(response http.ResponseWriter, request *http.Re
 		return
 	}
 	w.mu.Lock()
-	defer w.mu.Unlock()
 	repositoryID, found := w.repoNames[repoName(owner, name)]
 	if !found {
+		w.mu.Unlock()
 		writeError(response, http.StatusNotFound, "Not Found")
 		return
 	}
 	if _, allowed := token.repositoryIDs[repositoryID]; !allowed || permissionRank(token.permissions["actions"]) < permissionRank("write") {
+		w.mu.Unlock()
 		writeError(response, http.StatusNotFound, "Not Found")
 		return
 	}
@@ -78,17 +80,27 @@ func (w *world) cancelWorkflowRun(response http.ResponseWriter, request *http.Re
 		}
 	}
 	if index < 0 {
+		w.mu.Unlock()
 		writeError(response, http.StatusNotFound, "Not Found")
 		return
 	}
 	if w.workflowRuns[index].Status == "completed" {
+		w.mu.Unlock()
 		writeError(response, http.StatusConflict, "Cannot cancel a completed workflow run")
 		return
 	}
 	run := w.workflowRuns[index]
 	run.CancellationRequested = true
 	w.workflowRuns[index] = run
+	active := w.activeRuns[runID]
+	if active.command != nil && active.command.Process != nil {
+		if err := active.command.Process.Signal(os.Interrupt); err == nil {
+			active.cancellationSignalled = true
+			w.activeRuns[runID] = active
+		}
+	}
 	w.mutations++
+	w.mu.Unlock()
 	response.Header().Set("X-GitHub-Request-Id", "DTU")
 	response.WriteHeader(http.StatusAccepted)
 }

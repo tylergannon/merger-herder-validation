@@ -88,12 +88,12 @@ Evidence:
 
 - [x] Implement `CI-03` Actions run cancellation with asynchronous acceptance.
 - [x] Script cancellation/completion races used by Pause scenarios.
-- [ ] Execute the configured repository workflow through pinned `act` and
+- [x] Execute the configured repository workflow through pinned `act` and
       Docker for authoritative happy-path CI.
-- [ ] Bind checkout, run state, logs, and conclusion to the exact release SHA.
+- [x] Bind checkout, run state, logs, and conclusion to the exact release SHA.
 - [x] Keep scripted mode for cancellation semantics that `act` cannot reproduce.
 
-Scripted cancellation evidence:
+Evidence:
 
 - [`docs/p1-cancellation-proof.md`](../docs/p1-cancellation-proof.md)
 

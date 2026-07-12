@@ -58,6 +58,10 @@ func (c ControlClient) TransitionWorkflowRun(ctx context.Context, input Workflow
 	return c.post(ctx, "workflow-runs/transition", input)
 }
 
+func (c ControlClient) ExecuteWorkflowRun(ctx context.Context, input ExecuteWorkflowInput) error {
+	return c.post(ctx, "workflow-runs/execute", input)
+}
+
 func (c ControlClient) State(ctx context.Context) (StateSnapshot, error) {
 	endpoint := c.BaseURL.ResolveReference(&url.URL{Path: "state"})
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
