@@ -57,6 +57,9 @@ See [`docs/p1-api-proof.md`](./docs/p1-api-proof.md) for the tested journey,
 claim coverage, and remaining proof boundaries. Live-GitHub conformance and the
 full MergeHerder P1 system scenario remain separate required layers.
 
+Progress toward that complete environment is tracked in
+[`ephemeral/P1_ENVIRONMENT_ROADMAP.md`](./ephemeral/P1_ENVIRONMENT_ROADMAP.md).
+
 ## License
 
 MIT. See [`LICENSE`](./LICENSE).
