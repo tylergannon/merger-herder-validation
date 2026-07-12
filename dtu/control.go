@@ -29,6 +29,7 @@ func (w *world) controlHandler() http.Handler {
 	mux.HandleFunc("POST /deliveries", w.deliverEvent)
 	mux.HandleFunc("POST /events/duplicate", w.duplicateEvent)
 	mux.HandleFunc("POST /workflow-runs/transition", w.transitionWorkflowRun)
+	mux.HandleFunc("POST /workflow-runs/execute", w.executeWorkflowRun)
 	mux.HandleFunc("GET /state", w.getState)
 	return mux
 }

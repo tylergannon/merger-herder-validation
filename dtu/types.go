@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"sync"
 	"time"
 )
@@ -29,6 +30,7 @@ type Instance struct {
 type instanceRuntime struct {
 	publicServer  http.Server
 	controlServer http.Server
+	world         *world
 	done          chan error
 	removeDataDir bool
 	dataDir       string
@@ -57,6 +59,7 @@ type world struct {
 	pendingEvents     []PendingEvent
 	observationErrors []ObservationError
 	deliveryAttempts  []DeliveryAttempt
+	activeRuns        map[int64]activeRun
 	nextRunID         int64
 	nextEventID       uint64
 	unsupported       []UnsupportedRequest
@@ -118,6 +121,11 @@ type workflowConfig struct {
 	releaseRef   string
 }
 
+type activeRun struct {
+	command               *exec.Cmd
+	cancellationSignalled bool
+}
+
 type PendingEvent struct {
 	GUID         string          `json:"guid"`
 	Event        string          `json:"event"`
@@ -144,17 +152,19 @@ type DeliveryAttempt struct {
 }
 
 type WorkflowRun struct {
-	ID           int64  `json:"id"`
-	Attempt      int    `json:"run_attempt"`
-	RepositoryID int64  `json:"repository_id"`
-	WorkflowID   int64  `json:"workflow_id"`
-	WorkflowName string `json:"workflow_name"`
-	WorkflowPath string `json:"workflow_path"`
-	Event        string `json:"event"`
-	HeadBranch   string `json:"head_branch"`
-	HeadSHA      string `json:"head_sha"`
-	Status       string `json:"status"`
-	Conclusion   string `json:"conclusion,omitempty"`
+	ID                    int64  `json:"id"`
+	Attempt               int    `json:"run_attempt"`
+	RepositoryID          int64  `json:"repository_id"`
+	WorkflowID            int64  `json:"workflow_id"`
+	WorkflowName          string `json:"workflow_name"`
+	WorkflowPath          string `json:"workflow_path"`
+	Event                 string `json:"event"`
+	HeadBranch            string `json:"head_branch"`
+	HeadSHA               string `json:"head_sha"`
+	Status                string `json:"status"`
+	Conclusion            string `json:"conclusion,omitempty"`
+	CancellationRequested bool   `json:"cancellation_requested"`
+	Logs                  string `json:"logs,omitempty"`
 }
 
 type UnsupportedRequest struct {
@@ -224,6 +234,10 @@ type WorkflowTransitionInput struct {
 	RunID      int64  `json:"run_id"`
 	Status     string `json:"status"`
 	Conclusion string `json:"conclusion,omitempty"`
+}
+
+type ExecuteWorkflowInput struct {
+	RunID int64 `json:"run_id"`
 }
 
 type StateSnapshot struct {

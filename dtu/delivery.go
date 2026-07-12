@@ -114,6 +114,10 @@ func (w *world) transitionWorkflowRun(response http.ResponseWriter, request *htt
 		writeControlError(response, http.StatusNotFound, "unknown workflow run")
 		return
 	}
+	if _, claimed := w.activeRuns[input.RunID]; claimed {
+		writeControlError(response, http.StatusConflict, "workflow run execution is claimed")
+		return
+	}
 	run := w.workflowRuns[index]
 	action := ""
 	switch {
