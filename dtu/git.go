@@ -255,6 +255,12 @@ func (w *world) appendWorkflowEvent(repository repository, run WorkflowRun, acti
 }
 
 func (w *world) appendPendingEvent(event, action string, repositoryID int64, payload any) {
+	repository := w.repositories[repositoryID]
+	installation := w.installs[repository.installationID]
+	w.appendPendingAppEvent(event, action, installation.appID, repositoryID, payload)
+}
+
+func (w *world) appendPendingAppEvent(event, action string, appID, repositoryID int64, payload any) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		panic(fmt.Sprintf("marshal pending %s event: %v", event, err))
@@ -264,6 +270,7 @@ func (w *world) appendPendingEvent(event, action string, repositoryID int64, pay
 		GUID:         fmt.Sprintf("dtu-%012d", w.nextEventID),
 		Event:        event,
 		Action:       action,
+		AppID:        appID,
 		RepositoryID: repositoryID,
 		CreatedAt:    w.now,
 		Body:         body,

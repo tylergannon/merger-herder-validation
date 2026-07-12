@@ -77,6 +77,8 @@ type installation struct {
 	id            int64
 	appID         int64
 	active        bool
+	owner         string
+	ownerType     string
 	permissions   map[string]string
 	repositoryIDs map[int64]struct{}
 }
@@ -130,6 +132,7 @@ type PendingEvent struct {
 	GUID         string          `json:"guid"`
 	Event        string          `json:"event"`
 	Action       string          `json:"action,omitempty"`
+	AppID        int64           `json:"app_id"`
 	RepositoryID int64           `json:"repository_id"`
 	CreatedAt    time.Time       `json:"created_at"`
 	Body         json.RawMessage `json:"body"`
@@ -184,6 +187,8 @@ type InstallationInput struct {
 	ID          int64             `json:"id"`
 	AppID       int64             `json:"app_id"`
 	Active      bool              `json:"active"`
+	Owner       string            `json:"owner,omitempty"`
+	OwnerType   string            `json:"owner_type,omitempty"`
 	Permissions map[string]string `json:"permissions"`
 }
 

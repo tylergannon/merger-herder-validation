@@ -54,8 +54,8 @@ go test -race ./...
 ```
 
 See [`docs/p1-api-proof.md`](./docs/p1-api-proof.md) for the tested journey,
-claim coverage, and remaining proof boundaries. Live-GitHub conformance and the
-full MergeHerder P1 system scenario remain separate required layers.
+claim coverage, and remaining proof boundaries. Live-GitHub conformance remains
+a separate required layer.
 
 The next completed slice, [`docs/p1-ref-events-proof.md`](./docs/p1-ref-events-proof.md),
 proves required ref transitions and derives pending push/workflow state from
@@ -69,6 +69,16 @@ workflow lifecycle through completion.
 scripted Actions cancellation races used by Pause scenarios plus pinned
 Docker/`act` execution, exact-SHA checkout, logs, conclusions, and active-run
 cancellation.
+
+The gated `TestMergeHerderP1OneCleanPRLands` system test starts MergeHerder,
+Postgres, the DTU, and a trusted worker; submits one PR through the real queue
+API; runs CI through Docker/`act`; and proves the exact release commit lands on
+the default branch:
+
+```sh
+DTU_REQUIRE_SYSTEM=1 MERGE_HERDER_DIR=/path/to/merge-herder go test -race ./dtu \
+  -run '^TestMergeHerderP1OneCleanPRLands$' -count=1 -v
+```
 
 Progress toward that complete environment is tracked in
 [`ephemeral/P1_ENVIRONMENT_ROADMAP.md`](./ephemeral/P1_ENVIRONMENT_ROADMAP.md).

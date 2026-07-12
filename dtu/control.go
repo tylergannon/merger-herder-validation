@@ -82,6 +82,19 @@ func (w *world) createInstallation(response http.ResponseWriter, request *http.R
 			return
 		}
 	}
+	if input.Owner != "" {
+		if !validPathComponent(input.Owner) {
+			writeControlError(response, http.StatusBadRequest, "invalid installation owner")
+			return
+		}
+		if input.OwnerType == "" {
+			input.OwnerType = "User"
+		}
+		if input.OwnerType != "User" && input.OwnerType != "Organization" {
+			writeControlError(response, http.StatusBadRequest, "invalid installation owner type")
+			return
+		}
+	}
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -97,8 +110,13 @@ func (w *world) createInstallation(response http.ResponseWriter, request *http.R
 		id:            input.ID,
 		appID:         input.AppID,
 		active:        input.Active,
+		owner:         input.Owner,
+		ownerType:     input.OwnerType,
 		permissions:   copyMap(input.Permissions),
 		repositoryIDs: make(map[int64]struct{}),
+	}
+	if input.Owner != "" {
+		w.appendInstallationEvent(w.installs[input.ID], "created")
 	}
 	w.mutations++
 	writeJSON(response, http.StatusCreated, map[string]int64{"id": input.ID})
@@ -159,6 +177,9 @@ func (w *world) createRepository(response http.ResponseWriter, request *http.Req
 	w.repoNames[key] = input.ID
 	installation.repositoryIDs[input.ID] = struct{}{}
 	w.installs[input.InstallationID] = installation
+	if installation.owner != "" {
+		w.appendInstallationRepositoriesEvent(installation, w.repositories[input.ID], "added")
+	}
 	w.mutations++
 	writeJSON(response, http.StatusCreated, map[string]int64{"id": input.ID})
 }

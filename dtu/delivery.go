@@ -17,15 +17,14 @@ func (w *world) deliverEvent(response http.ResponseWriter, request *http.Request
 	}
 	w.mu.RLock()
 	event, found := w.findPendingEvent(input.GUID)
-	repository := w.repositories[event.RepositoryID]
-	installation := w.installs[repository.installationID]
-	configuredApp := w.apps[installation.appID]
-	now := w.now
-	w.mu.RUnlock()
 	if !found {
+		w.mu.RUnlock()
 		writeControlError(response, http.StatusNotFound, "unknown event")
 		return
 	}
+	configuredApp := w.apps[event.AppID]
+	now := w.now
+	w.mu.RUnlock()
 	if configuredApp.webhookURL == "" || configuredApp.webhookSecret == "" {
 		writeControlError(response, http.StatusConflict, "webhook destination is not configured")
 		return
