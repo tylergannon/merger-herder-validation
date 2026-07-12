@@ -46,6 +46,18 @@ func (c ControlClient) ConfigureWorkflow(ctx context.Context, input WorkflowInpu
 	return c.post(ctx, "workflows", input)
 }
 
+func (c ControlClient) DeliverEvent(ctx context.Context, input DeliveryInput) error {
+	return c.post(ctx, "deliveries", input)
+}
+
+func (c ControlClient) DuplicateEvent(ctx context.Context, input DuplicateEventInput) error {
+	return c.post(ctx, "events/duplicate", input)
+}
+
+func (c ControlClient) TransitionWorkflowRun(ctx context.Context, input WorkflowTransitionInput) error {
+	return c.post(ctx, "workflow-runs/transition", input)
+}
+
 func (c ControlClient) State(ctx context.Context) (StateSnapshot, error) {
 	endpoint := c.BaseURL.ResolveReference(&url.URL{Path: "state"})
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)

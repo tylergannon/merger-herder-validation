@@ -26,6 +26,9 @@ func (w *world) controlHandler() http.Handler {
 	mux.HandleFunc("POST /pulls/state", w.changePullRequestState)
 	mux.HandleFunc("POST /clock/advance", w.advanceTime)
 	mux.HandleFunc("POST /workflows", w.configureWorkflow)
+	mux.HandleFunc("POST /deliveries", w.deliverEvent)
+	mux.HandleFunc("POST /events/duplicate", w.duplicateEvent)
+	mux.HandleFunc("POST /workflow-runs/transition", w.transitionWorkflowRun)
 	mux.HandleFunc("GET /state", w.getState)
 	return mux
 }
@@ -57,7 +60,12 @@ func (w *world) createApp(response http.ResponseWriter, request *http.Request) {
 		writeControlError(response, http.StatusConflict, "invalid or duplicate App ID")
 		return
 	}
-	w.apps[input.ID] = app{id: input.ID, publicKey: key}
+	w.apps[input.ID] = app{
+		id:            input.ID,
+		publicKey:     key,
+		webhookURL:    input.WebhookURL,
+		webhookSecret: input.WebhookSecret,
+	}
 	w.mutations++
 	writeJSON(response, http.StatusCreated, map[string]int64{"id": input.ID})
 }
@@ -281,6 +289,7 @@ func (w *world) getState(response http.ResponseWriter, _ *http.Request) {
 	pendingEvents := append([]PendingEvent(nil), w.pendingEvents...)
 	workflowRuns := append([]WorkflowRun(nil), w.workflowRuns...)
 	observationErrors := append([]ObservationError(nil), w.observationErrors...)
+	deliveryAttempts := append([]DeliveryAttempt(nil), w.deliveryAttempts...)
 	writeJSON(response, http.StatusOK, StateSnapshot{
 		Now:                 w.now,
 		Apps:                len(w.apps),
@@ -293,6 +302,7 @@ func (w *world) getState(response http.ResponseWriter, _ *http.Request) {
 		PendingEvents:       pendingEvents,
 		WorkflowRuns:        workflowRuns,
 		ObservationErrors:   observationErrors,
+		DeliveryAttempts:    deliveryAttempts,
 	})
 }
 

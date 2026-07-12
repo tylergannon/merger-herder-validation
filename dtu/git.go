@@ -227,23 +227,31 @@ func (w *world) appendQueuedWorkflow(repository repository, workflow workflowCon
 		Status:       "queued",
 	}
 	w.workflowRuns = append(w.workflowRuns, run)
+	w.appendWorkflowEvent(repository, run, "requested")
+}
+
+func (w *world) appendWorkflowEvent(repository repository, run WorkflowRun, action string) {
+	var conclusion any
+	if run.Conclusion != "" {
+		conclusion = run.Conclusion
+	}
 	payload := struct {
 		Action       string            `json:"action"`
 		WorkflowRun  workflowRunEvent  `json:"workflow_run"`
 		Repository   eventRepository   `json:"repository"`
 		Installation eventInstallation `json:"installation"`
 	}{
-		Action: "requested",
+		Action: action,
 		WorkflowRun: workflowRunEvent{
 			ID: run.ID, RunAttempt: run.Attempt, WorkflowID: run.WorkflowID,
 			Name: run.WorkflowName, Path: run.WorkflowPath, Event: run.Event,
 			HeadBranch: run.HeadBranch, HeadSHA: run.HeadSHA, Status: run.Status,
-			Conclusion: nil,
+			Conclusion: conclusion,
 		},
 		Repository:   eventRepository{ID: repository.id, FullName: repository.owner + "/" + repository.name},
 		Installation: eventInstallation{ID: repository.installationID},
 	}
-	w.appendPendingEvent("workflow_run", "requested", repository.id, payload)
+	w.appendPendingEvent("workflow_run", action, repository.id, payload)
 }
 
 func (w *world) appendPendingEvent(event, action string, repositoryID int64, payload any) {
