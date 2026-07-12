@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,6 +25,7 @@ func (w *world) controlHandler() http.Handler {
 	mux.HandleFunc("POST /pulls", w.createPullRequest)
 	mux.HandleFunc("POST /pulls/state", w.changePullRequestState)
 	mux.HandleFunc("POST /clock/advance", w.advanceTime)
+	mux.HandleFunc("POST /workflows", w.configureWorkflow)
 	mux.HandleFunc("GET /state", w.getState)
 	return mux
 }
@@ -144,6 +146,7 @@ func (w *world) createRepository(response http.ResponseWriter, request *http.Req
 		installationID: input.InstallationID,
 		gitDir:         gitDir,
 	}
+	w.receiveLocks[input.ID] = new(sync.Mutex)
 	w.repoNames[key] = input.ID
 	installation.repositoryIDs[input.ID] = struct{}{}
 	w.installs[input.InstallationID] = installation
@@ -241,10 +244,43 @@ func (w *world) advanceTime(response http.ResponseWriter, request *http.Request)
 	writeJSON(response, http.StatusOK, map[string]time.Time{"now": now})
 }
 
+func (w *world) configureWorkflow(response http.ResponseWriter, request *http.Request) {
+	var input WorkflowInput
+	if !decodeControl(response, request, &input) {
+		return
+	}
+	if input.ID <= 0 || input.Name == "" || input.Path == "" || input.ReleaseRef == "" {
+		writeControlError(response, http.StatusBadRequest, "invalid workflow")
+		return
+	}
+	if err := runGit("", "check-ref-format", "--branch", input.ReleaseRef); err != nil {
+		writeControlError(response, http.StatusBadRequest, "invalid release ref")
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if _, found := w.repositories[input.RepositoryID]; !found {
+		writeControlError(response, http.StatusBadRequest, "unknown repository")
+		return
+	}
+	w.workflows[input.RepositoryID] = workflowConfig{
+		repositoryID: input.RepositoryID,
+		id:           input.ID,
+		name:         input.Name,
+		path:         input.Path,
+		releaseRef:   input.ReleaseRef,
+	}
+	w.mutations++
+	writeJSON(response, http.StatusCreated, map[string]int64{"id": input.ID})
+}
+
 func (w *world) getState(response http.ResponseWriter, _ *http.Request) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	unsupported := append([]UnsupportedRequest(nil), w.unsupported...)
+	pendingEvents := append([]PendingEvent(nil), w.pendingEvents...)
+	workflowRuns := append([]WorkflowRun(nil), w.workflowRuns...)
+	observationErrors := append([]ObservationError(nil), w.observationErrors...)
 	writeJSON(response, http.StatusOK, StateSnapshot{
 		Now:                 w.now,
 		Apps:                len(w.apps),
@@ -254,6 +290,9 @@ func (w *world) getState(response http.ResponseWriter, _ *http.Request) {
 		Tokens:              len(w.tokens),
 		Mutations:           w.mutations,
 		UnsupportedRequests: unsupported,
+		PendingEvents:       pendingEvents,
+		WorkflowRuns:        workflowRuns,
+		ObservationErrors:   observationErrors,
 	})
 }
 

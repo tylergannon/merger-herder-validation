@@ -3,6 +3,7 @@ package dtu
 import (
 	"context"
 	"crypto/rsa"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"sync"
@@ -40,18 +41,25 @@ func (i Instance) Close(ctx context.Context) error {
 }
 
 type world struct {
-	mu           sync.RWMutex
-	now          time.Time
-	dataDir      string
-	gitBackend   string
-	apps         map[int64]app
-	installs     map[int64]installation
-	repositories map[int64]repository
-	repoNames    map[string]int64
-	pulls        map[pullKey]pullRequest
-	tokens       map[string]installationToken
-	unsupported  []UnsupportedRequest
-	mutations    uint64
+	mu                sync.RWMutex
+	now               time.Time
+	dataDir           string
+	gitBackend        string
+	apps              map[int64]app
+	installs          map[int64]installation
+	repositories      map[int64]repository
+	repoNames         map[string]int64
+	pulls             map[pullKey]pullRequest
+	tokens            map[string]installationToken
+	workflows         map[int64]workflowConfig
+	receiveLocks      map[int64]*sync.Mutex
+	workflowRuns      []WorkflowRun
+	pendingEvents     []PendingEvent
+	observationErrors []ObservationError
+	nextRunID         int64
+	nextEventID       uint64
+	unsupported       []UnsupportedRequest
+	mutations         uint64
 }
 
 type app struct {
@@ -99,6 +107,44 @@ type installationToken struct {
 	expiresAt      time.Time
 }
 
+type workflowConfig struct {
+	repositoryID int64
+	id           int64
+	name         string
+	path         string
+	releaseRef   string
+}
+
+type PendingEvent struct {
+	GUID         string          `json:"guid"`
+	Event        string          `json:"event"`
+	Action       string          `json:"action,omitempty"`
+	RepositoryID int64           `json:"repository_id"`
+	CreatedAt    time.Time       `json:"created_at"`
+	Body         json.RawMessage `json:"body"`
+}
+
+type ObservationError struct {
+	RepositoryID int64     `json:"repository_id"`
+	Operation    string    `json:"operation"`
+	Message      string    `json:"message"`
+	At           time.Time `json:"at"`
+}
+
+type WorkflowRun struct {
+	ID           int64  `json:"id"`
+	Attempt      int    `json:"run_attempt"`
+	RepositoryID int64  `json:"repository_id"`
+	WorkflowID   int64  `json:"workflow_id"`
+	WorkflowName string `json:"workflow_name"`
+	WorkflowPath string `json:"workflow_path"`
+	Event        string `json:"event"`
+	HeadBranch   string `json:"head_branch"`
+	HeadSHA      string `json:"head_sha"`
+	Status       string `json:"status"`
+	Conclusion   string `json:"conclusion,omitempty"`
+}
+
 type UnsupportedRequest struct {
 	Method string    `json:"method"`
 	Path   string    `json:"path"`
@@ -143,6 +189,14 @@ type AdvanceTimeInput struct {
 	Duration string `json:"duration"`
 }
 
+type WorkflowInput struct {
+	RepositoryID int64  `json:"repository_id"`
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	Path         string `json:"path"`
+	ReleaseRef   string `json:"release_ref"`
+}
+
 type StateSnapshot struct {
 	Now                 time.Time            `json:"now"`
 	Apps                int                  `json:"apps"`
@@ -152,4 +206,7 @@ type StateSnapshot struct {
 	Tokens              int                  `json:"tokens"`
 	Mutations           uint64               `json:"mutations"`
 	UnsupportedRequests []UnsupportedRequest `json:"unsupported_requests"`
+	PendingEvents       []PendingEvent       `json:"pending_events"`
+	WorkflowRuns        []WorkflowRun        `json:"workflow_runs"`
+	ObservationErrors   []ObservationError   `json:"observation_errors"`
 }

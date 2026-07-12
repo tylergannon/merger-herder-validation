@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -66,6 +67,9 @@ func Start(config Config) (Instance, error) {
 		repoNames:    make(map[string]int64),
 		pulls:        make(map[pullKey]pullRequest),
 		tokens:       make(map[string]installationToken),
+		workflows:    make(map[int64]workflowConfig),
+		receiveLocks: make(map[int64]*sync.Mutex),
+		nextRunID:    1000,
 	}
 
 	runtime := &instanceRuntime{
