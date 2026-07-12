@@ -99,14 +99,18 @@ Evidence:
 
 ## 4. MergeHerder P1 System Harness
 
-- [ ] Start real DTU GitHub and MergeHerder processes together.
-- [ ] Configure MergeHerder's real GitHub/Octokit and Git origins for DTU.
-- [ ] Establish the real submit-to-queue front door.
-- [ ] Connect the real worker boundary and return the squash result `R0=M-SA`.
-- [ ] Drive the ordered P1 REST, Git, webhook, workflow, and worker interactions.
-- [ ] Observe `main==R0`, source `A==A0`, CI success for `R0`, and no current
+- [x] Start real DTU GitHub and MergeHerder processes together.
+- [x] Configure MergeHerder's real GitHub/Octokit and Git origins for DTU.
+- [x] Establish the real submit-to-queue front door.
+- [x] Connect the real worker boundary and return the squash result `R0=M-SA`.
+- [x] Drive the ordered P1 REST, Git, webhook, workflow, and worker interactions.
+- [x] Observe `main==R0`, source `A==A0`, CI success for `R0`, and no current
       batch.
-- [ ] Fail on every unsupported GitHub-shaped request.
+- [x] Fail on every unsupported GitHub-shaped request.
+
+Evidence: `TestMergeHerderP1OneCleanPRLands` passes against the real
+MergeHerder process, isolated Postgres, real Git smart HTTP, signed webhooks,
+trusted worker boundary, and Docker/`act` execution.
 
 ## 5. Independent Compatibility
 
@@ -124,4 +128,4 @@ Evidence:
 - fork and cross-repository pull requests;
 - general GitHub REST compatibility;
 - arbitrary Actions, checks, logs, jobs, or workflow APIs; and
-- product scenarios P2 through P14 until P1 passes end to end.
+- product scenarios P2 through P14.

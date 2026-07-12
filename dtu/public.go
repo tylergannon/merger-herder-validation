@@ -291,7 +291,8 @@ func (w *world) authenticateAppJWT(request *http.Request) (int64, bool) {
 }
 
 func (w *world) authenticateInstallationToken(request *http.Request) (installationToken, bool) {
-	raw, found := bearerToken(request)
+	scheme, raw, found := strings.Cut(request.Header.Get("Authorization"), " ")
+	found = found && raw != "" && (strings.EqualFold(scheme, "Bearer") || strings.EqualFold(scheme, "token"))
 	if !found {
 		return installationToken{}, false
 	}

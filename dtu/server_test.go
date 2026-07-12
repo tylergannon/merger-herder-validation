@@ -456,28 +456,32 @@ func assertBranch(t *testing.T, label string, branch *github.PullRequestBranch, 
 
 func assertRawPullResponse(t *testing.T, baseURL url.URL, token, headSHA string) {
 	t.Helper()
-	endpoint := baseURL.ResolveReference(&url.URL{Path: "/repos/Acme/widget/pulls/7"})
-	request, err := http.NewRequest(http.MethodGet, endpoint.String(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request.Header.Set("Authorization", "Bearer "+token)
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	var body struct {
-		Number int `json:"number"`
-		Head   struct {
-			SHA string `json:"sha"`
-		} `json:"head"`
-	}
-	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
-		t.Fatal(err)
-	}
-	if response.StatusCode != http.StatusOK || body.Number != 7 || body.Head.SHA != headSHA {
-		t.Fatalf("raw response: status=%d body=%#v", response.StatusCode, body)
+	for _, scheme := range []string{"Bearer", "token"} {
+		t.Run(scheme, func(t *testing.T) {
+			endpoint := baseURL.ResolveReference(&url.URL{Path: "/repos/Acme/widget/pulls/7"})
+			request, err := http.NewRequest(http.MethodGet, endpoint.String(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Authorization", scheme+" "+token)
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			var body struct {
+				Number int `json:"number"`
+				Head   struct {
+					SHA string `json:"sha"`
+				} `json:"head"`
+			}
+			if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != http.StatusOK || body.Number != 7 || body.Head.SHA != headSHA {
+				t.Fatalf("raw response: status=%d body=%#v", response.StatusCode, body)
+			}
+		})
 	}
 }
 
