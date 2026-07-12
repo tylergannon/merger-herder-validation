@@ -42,6 +42,10 @@ func (c ControlClient) AdvanceTime(ctx context.Context, input AdvanceTimeInput) 
 	return c.post(ctx, "clock/advance", input)
 }
 
+func (c ControlClient) ConfigureWorkflow(ctx context.Context, input WorkflowInput) error {
+	return c.post(ctx, "workflows", input)
+}
+
 func (c ControlClient) State(ctx context.Context) (StateSnapshot, error) {
 	endpoint := c.BaseURL.ResolveReference(&url.URL{Path: "state"})
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)

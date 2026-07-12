@@ -57,6 +57,10 @@ See [`docs/p1-api-proof.md`](./docs/p1-api-proof.md) for the tested journey,
 claim coverage, and remaining proof boundaries. Live-GitHub conformance and the
 full MergeHerder P1 system scenario remain separate required layers.
 
+The next completed slice, [`docs/p1-ref-events-proof.md`](./docs/p1-ref-events-proof.md),
+proves required ref transitions and derives pending push/workflow state from
+real receive-pack results.
+
 Progress toward that complete environment is tracked in
 [`ephemeral/P1_ENVIRONMENT_ROADMAP.md`](./ephemeral/P1_ENVIRONMENT_ROADMAP.md).
 

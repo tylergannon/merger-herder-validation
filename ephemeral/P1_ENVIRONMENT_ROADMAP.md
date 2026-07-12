@@ -24,13 +24,12 @@ Status meanings:
 - [x] Targeted REST portion of `PR-01`, including real-ref-backed snapshots.
 - [x] Installation-token authentication and scope across REST and Git.
 - [x] Raw HTTP, `go-github`, Git CLI, virtual-expiry, and subprocess proof.
-- [~] `GIT-01`: real smart-HTTP fetch works, but the complete required object and
-  unavailable-SHA matrix is not yet recorded as proof.
-- [~] `GIT-02`: real receive-pack works, but release-ref creation,
-  fast-forward, and guarded force-with-lease behavior are not yet proven.
-- [~] `GIT-03`: real receive-pack supplies normal Git fast-forward rules, but
-  default-branch landing and stale/non-fast-forward rejection are not yet
-  proven as named scenarios.
+- [x] `GIT-01`: real smart-HTTP fetch proves exact reachable objects plus
+      unavailable and unauthorized failures.
+- [x] `GIT-02`: release creation, fast-forward, and exact guarded
+      force-with-lease behavior are proven through real receive-pack.
+- [x] `GIT-03`: default-branch fast-forward landing and stale/non-fast-forward
+      rejection are proven through real receive-pack.
 
 Evidence:
 
@@ -43,24 +42,28 @@ Evidence:
 This is the next implementation slice. It makes Git state transitions produce
 the GitHub-side facts consumed by later webhook and CI layers.
 
-- [ ] Prove `GIT-01` fetch and unavailable/unauthorized object behavior.
-- [ ] Prove `GIT-02` release-ref creation and fast-forward update.
-- [ ] Prove guarded release-ref rebuild with exact force-with-lease behavior.
-- [ ] Prove rejected pushes change no refs and create no events.
-- [ ] Prove `GIT-03` default-branch fast-forward landing.
-- [ ] Prove stale and non-fast-forward default-branch pushes fail without ref
+- [x] Prove `GIT-01` fetch and unavailable/unauthorized object behavior.
+- [x] Prove `GIT-02` release-ref creation and fast-forward update.
+- [x] Prove guarded release-ref rebuild with exact force-with-lease behavior.
+- [x] Prove rejected pushes change no refs and create no events.
+- [x] Prove `GIT-03` default-branch fast-forward landing.
+- [x] Prove stale and non-fast-forward default-branch pushes fail without ref
       movement.
-- [ ] Create an immutable pending `push` event from each accepted branch push
+- [x] Create an immutable pending `push` event from each accepted branch push
       using the actual before/after SHAs.
-- [ ] Create one queued authoritative workflow run when the configured release
+- [x] Create one queued authoritative workflow run when the configured release
       ref moves, bound to its exact head SHA.
-- [ ] Ensure Git state commits before event and workflow records become visible.
+- [x] Ensure Git state commits before event and workflow records become visible.
 
 Completion evidence:
 
 - named real-Git tests for `GIT-01` through `GIT-03`;
 - control inspection of refs, pending events, and workflow runs; and
 - negative proof that rejected updates produce neither state nor events.
+
+Evidence:
+
+- [`docs/p1-ref-events-proof.md`](../docs/p1-ref-events-proof.md)
 
 ## 2. Webhook Delivery And CI Lifecycle
 
