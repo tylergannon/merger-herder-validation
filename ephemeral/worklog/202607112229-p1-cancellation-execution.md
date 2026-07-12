@@ -40,4 +40,5 @@ contract, then define the separate `act`-backed happy-path execution sub-slice.
   and `git diff --check` pass.
 - remaining: independent consensus review and the `act`-backed execution half
   of phase 3.
-- branch_pr: pending commit, push, and draft pull request.
+- branch_pr: committed as `e43495b`, pushed, and opened as draft PR
+  `https://github.com/tylergannon/merger-herder-validation/pull/4`.
