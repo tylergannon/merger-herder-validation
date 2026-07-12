@@ -49,4 +49,6 @@ workflow-run lifecycle events through completion.
 
 - consensus: phase 2 sufficient after three Claude Opus rounds.
 - remaining: phase 3 cancellation races and real workflow execution.
-- branch_pr: pending final proof, commit, push, and pull request creation.
+- branch_pr: committed as `e1b51ab`, pushed on
+  `codex/p1-webhook-lifecycle`, and opened as
+  `https://github.com/tylergannon/merger-herder-validation/pull/3`.
