@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v89/github"
 	"github.com/tylergannon/merger-herder-validation/dtu"
 )
 
@@ -267,6 +267,36 @@ func TestP1APINegativeClaims(t *testing.T) {
 	}
 }
 
+func TestGeneratedRESTContractCompatibility(t *testing.T) {
+	instance := startInstance(t)
+	wantNotFound := `{"documentation_url":"https://docs.github.com/rest","message":"Not Found","status":"404"}`
+	for _, test := range []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodPost, path: "/app/installations/not-a-number/access_tokens"},
+		{method: http.MethodGet, path: "/repos/Acme/widget/pulls/not-a-number"},
+		{method: http.MethodPost, path: "/repos/Acme/widget/actions/runs/not-a-number/cancel"},
+	} {
+		t.Run(test.path, func(t *testing.T) {
+			failure := rawRequestError(t, instance.GitHubURL, test.method, test.path, "", "")
+			if failure.status != http.StatusNotFound || failure.contentType != "application/json; charset=utf-8" || failure.body != wantNotFound {
+				t.Fatalf("malformed path response = %#v", failure)
+			}
+		})
+	}
+
+	control := dtu.NewControlClient(instance.ControlURL)
+	privateKey := generateKey(t)
+	seedAppInstallationRepository(t, control, privateKey, 1, 10, 100, "Acme", "widget")
+	appJWT := signAppJWT(t, privateKey, 1, proofTime.Add(-time.Minute), proofTime.Add(9*time.Minute))
+	unknownField := rawRequestError(t, instance.GitHubURL, http.MethodPost, "/app/installations/10/access_tokens", appJWT, `{"unknown":true}`)
+	bothSelectors := rawRequestError(t, instance.GitHubURL, http.MethodPost, "/app/installations/10/access_tokens", appJWT, `{"repositories":["widget"],"repository_ids":[100]}`)
+	if unknownField.status != http.StatusUnprocessableEntity || unknownField.contentType != "application/json; charset=utf-8" || unknownField.body != bothSelectors.body {
+		t.Fatalf("validation envelopes differ: unknown-field=%#v both-selectors=%#v", unknownField, bothSelectors)
+	}
+}
+
 func TestExecutableStartup(t *testing.T) {
 	binary := filepath.Join(t.TempDir(), "dtu-github")
 	run(t, "..", "go", "build", "-o", binary, "./cmd/dtu-github")
@@ -395,8 +425,13 @@ func signHMACJWT(t *testing.T, appID int64) string {
 }
 
 func githubClient(baseURL url.URL, token string) *github.Client {
-	client := github.NewClient(nil).WithAuthToken(token)
-	client.BaseURL = new(baseURL)
+	client, err := github.NewClient(
+		github.WithAuthToken(token),
+		github.WithEnterpriseURLs(baseURL.String(), baseURL.String()),
+	)
+	if err != nil {
+		panic(err)
+	}
 	return client
 }
 
@@ -517,17 +552,28 @@ func assertRawTokenResponse(t *testing.T, baseURL url.URL, appJWT string) {
 }
 
 type rawFailure struct {
-	status int
-	body   string
+	status      int
+	contentType string
+	body        string
 }
 
 func rawError(t *testing.T, baseURL url.URL, token, path string) rawFailure {
 	t.Helper()
-	request, err := http.NewRequest(http.MethodGet, baseURL.ResolveReference(&url.URL{Path: path}).String(), nil)
+	return rawRequestError(t, baseURL, http.MethodGet, path, token, "")
+}
+
+func rawRequestError(t *testing.T, baseURL url.URL, method, path, token, requestBody string) rawFailure {
+	t.Helper()
+	request, err := http.NewRequest(method, baseURL.ResolveReference(&url.URL{Path: path}).String(), strings.NewReader(requestBody))
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.Header.Set("Authorization", "Bearer "+token)
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
+	if requestBody != "" {
+		request.Header.Set("Content-Type", "application/json")
+	}
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
@@ -538,7 +584,7 @@ func rawError(t *testing.T, baseURL url.URL, token, path string) rawFailure {
 		t.Fatal(err)
 	}
 	encoded, _ := json.Marshal(body)
-	return rawFailure{status: response.StatusCode, body: string(encoded)}
+	return rawFailure{status: response.StatusCode, contentType: response.Header.Get("Content-Type"), body: string(encoded)}
 }
 
 func assertRawTokenFailure(t *testing.T, baseURL url.URL, token, body string, status int) {
