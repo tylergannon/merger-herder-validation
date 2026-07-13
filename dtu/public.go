@@ -1,6 +1,8 @@
 package dtu
 
 import (
+	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -14,162 +16,169 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v89/github"
+	githubserver "github.com/tylergannon/go-github-server"
 )
 
 func (w *world) publicHandler() http.Handler {
+	api := githubserver.New(githubserver.Services{
+		Actions:      actionsService{world: w},
+		Apps:         appsService{world: w},
+		PullRequests: pullRequestsService{world: w},
+	}, nil, githubserver.WithNotFoundCallback(w.recordUnsupported))
+
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		path := strings.TrimPrefix(request.URL.Path, "/")
 		parts := strings.Split(path, "/")
-
-		switch {
-		case len(parts) == 4 && parts[0] == "app" && parts[1] == "installations" && parts[3] == "access_tokens":
-			if request.Method != http.MethodPost {
-				w.handleUnsupported(response, request)
-				return
-			}
-			w.createInstallationToken(response, request, parts[2])
-		case len(parts) == 5 && parts[0] == "repos" && parts[3] == "pulls":
-			if request.Method != http.MethodGet {
-				w.handleUnsupported(response, request)
-				return
-			}
-			w.getPullRequest(response, request, parts[1], parts[2], parts[4])
-		case len(parts) == 7 && parts[0] == "repos" && parts[3] == "actions" && parts[4] == "runs" && parts[6] == "cancel":
-			if request.Method != http.MethodPost {
-				w.handleUnsupported(response, request)
-				return
-			}
-			w.cancelWorkflowRun(response, request, parts[1], parts[2], parts[5])
-		case isGitPath(parts):
+		if isGitPath(parts) {
 			w.serveGit(response, request, parts)
-		default:
-			w.handleUnsupported(response, request)
+			return
 		}
+		if hasMalformedNumericPath(request) {
+			writeError(response, http.StatusNotFound, "Not Found")
+			return
+		}
+		if isInstallationTokenRequest(request) {
+			if err := validateInstallationTokenBody(request); err != nil {
+				writeError(response, http.StatusUnprocessableEntity, "Validation Failed")
+				return
+			}
+		}
+		if raw, ok := authorizationCredential(request); ok {
+			if token, valid := w.authenticateInstallationToken(raw); valid {
+				request = request.WithContext(context.WithValue(request.Context(), installationTokenContextKey{}, token))
+			}
+		}
+
+		unsupported := new(bool)
+		request = request.WithContext(context.WithValue(request.Context(), unsupportedRequestKey{}, unsupported))
+		buffer := &responseBuffer{header: make(http.Header)}
+		api.ServeHTTP(buffer, request)
+		if *unsupported {
+			response.Header().Set("X-DTU-Unsupported", "true")
+			writeError(response, http.StatusNotFound, fmt.Sprintf("Unsupported endpoint: %s %s", request.Method, request.URL.Path))
+			return
+		}
+		if buffer.status >= http.StatusBadRequest {
+			var failure struct {
+				Message string `json:"message"`
+			}
+			if err := json.Unmarshal(buffer.body.Bytes(), &failure); err == nil && failure.Message != "" {
+				writeError(response, buffer.status, failure.Message)
+				return
+			}
+		}
+		if buffer.header.Get("Content-Type") == "application/json" {
+			buffer.header.Set("Content-Type", "application/json; charset=utf-8")
+		}
+		buffer.flush(response)
 	})
 }
 
-func (w *world) cancelWorkflowRun(response http.ResponseWriter, request *http.Request, owner, name, rawRunID string) {
-	runID, err := strconv.ParseInt(rawRunID, 10, 64)
-	if err != nil {
-		writeError(response, http.StatusNotFound, "Not Found")
-		return
-	}
-	token, authOK := w.authenticateInstallationToken(request)
+type actionsService struct {
+	githubserver.UnimplementedActionsService
+	world *world
+}
+
+func (s actionsService) CancelWorkflowRunByID(ctx context.Context, owner, name string, runID int64) (*github.Response, error) {
+	token, authOK := installationTokenFromContext(ctx)
 	if !authOK {
-		writeError(response, http.StatusUnauthorized, "Bad credentials")
-		return
+		return nil, githubAPIError(http.StatusUnauthorized, "Bad credentials")
 	}
-	w.mu.Lock()
-	repositoryID, found := w.repoNames[repoName(owner, name)]
+	s.world.mu.Lock()
+	repositoryID, found := s.world.repoNames[repoName(owner, name)]
 	if !found {
-		w.mu.Unlock()
-		writeError(response, http.StatusNotFound, "Not Found")
-		return
+		s.world.mu.Unlock()
+		return nil, githubAPIError(http.StatusNotFound, "Not Found")
 	}
 	if _, allowed := token.repositoryIDs[repositoryID]; !allowed || permissionRank(token.permissions["actions"]) < permissionRank("write") {
-		w.mu.Unlock()
-		writeError(response, http.StatusNotFound, "Not Found")
-		return
+		s.world.mu.Unlock()
+		return nil, githubAPIError(http.StatusNotFound, "Not Found")
 	}
 	index := -1
-	for candidate := range w.workflowRuns {
-		if w.workflowRuns[candidate].ID == runID && w.workflowRuns[candidate].RepositoryID == repositoryID {
+	for candidate := range s.world.workflowRuns {
+		if s.world.workflowRuns[candidate].ID == runID && s.world.workflowRuns[candidate].RepositoryID == repositoryID {
 			index = candidate
 			break
 		}
 	}
 	if index < 0 {
-		w.mu.Unlock()
-		writeError(response, http.StatusNotFound, "Not Found")
-		return
+		s.world.mu.Unlock()
+		return nil, githubAPIError(http.StatusNotFound, "Not Found")
 	}
-	if w.workflowRuns[index].Status == "completed" {
-		w.mu.Unlock()
-		writeError(response, http.StatusConflict, "Cannot cancel a completed workflow run")
-		return
+	if s.world.workflowRuns[index].Status == "completed" {
+		s.world.mu.Unlock()
+		return nil, githubAPIError(http.StatusConflict, "Cannot cancel a completed workflow run")
 	}
-	run := w.workflowRuns[index]
+	run := s.world.workflowRuns[index]
 	run.CancellationRequested = true
-	w.workflowRuns[index] = run
-	active := w.activeRuns[runID]
+	s.world.workflowRuns[index] = run
+	active := s.world.activeRuns[runID]
 	if active.command != nil && active.command.Process != nil {
 		if err := active.command.Process.Signal(os.Interrupt); err == nil {
 			active.cancellationSignalled = true
-			w.activeRuns[runID] = active
+			s.world.activeRuns[runID] = active
 		}
 	}
-	w.mutations++
-	w.mu.Unlock()
-	response.Header().Set("X-GitHub-Request-Id", "DTU")
-	response.WriteHeader(http.StatusAccepted)
+	s.world.mutations++
+	s.world.mu.Unlock()
+	return githubAPIResponse(http.StatusAccepted), nil
 }
 
-func (w *world) createInstallationToken(response http.ResponseWriter, request *http.Request, rawID string) {
-	installationID, err := strconv.ParseInt(rawID, 10, 64)
-	if err != nil {
-		writeError(response, http.StatusNotFound, "Not Found")
-		return
-	}
+type appsService struct {
+	githubserver.UnimplementedAppsService
+	world *world
+}
 
-	appID, authOK := w.authenticateAppJWT(request)
+func (s appsService) CreateInstallationToken(_ context.Context, appJWT string, installationID int64, options *github.InstallationTokenOptions) (*github.InstallationToken, *github.Response, error) {
+	appID, authOK := s.world.authenticateAppJWT(appJWT)
 	if !authOK {
-		writeError(response, http.StatusUnauthorized, "Bad credentials")
-		return
+		return nil, nil, githubAPIError(http.StatusUnauthorized, "Bad credentials")
 	}
-
-	var options github.InstallationTokenOptions
-	if err := decodeOptionalJSON(request, &options); err != nil {
-		writeError(response, http.StatusUnprocessableEntity, "Validation Failed")
-		return
+	if options == nil {
+		options = new(github.InstallationTokenOptions)
 	}
 	if len(options.Repositories) > 0 && len(options.RepositoryIDs) > 0 {
-		writeError(response, http.StatusUnprocessableEntity, "Validation Failed")
-		return
+		return nil, nil, githubAPIError(http.StatusUnprocessableEntity, "Validation Failed")
 	}
 
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	s.world.mu.Lock()
+	defer s.world.mu.Unlock()
 
-	installation, found := w.installs[installationID]
+	installation, found := s.world.installs[installationID]
 	if !found || installation.appID != appID {
-		writeError(response, http.StatusNotFound, "Not Found")
-		return
+		return nil, nil, githubAPIError(http.StatusNotFound, "Not Found")
 	}
 	if !installation.active {
-		writeError(response, http.StatusForbidden, "Installation suspended")
-		return
+		return nil, nil, githubAPIError(http.StatusForbidden, "Installation suspended")
 	}
 
-	repositoryIDs, valid := w.selectRepositories(installation, options)
+	repositoryIDs, valid := s.world.selectRepositories(installation, *options)
 	if !valid {
-		writeError(response, http.StatusUnprocessableEntity, "Validation Failed")
-		return
+		return nil, nil, githubAPIError(http.StatusUnprocessableEntity, "Validation Failed")
 	}
 	permissions, valid := selectPermissions(installation.permissions, options.Permissions)
 	if !valid {
-		writeError(response, http.StatusUnprocessableEntity, "Validation Failed")
-		return
+		return nil, nil, githubAPIError(http.StatusUnprocessableEntity, "Validation Failed")
 	}
 
 	value, err := randomToken()
 	if err != nil {
-		writeError(response, http.StatusInternalServerError, "Internal Server Error")
-		return
+		return nil, nil, githubAPIError(http.StatusInternalServerError, "Internal Server Error")
 	}
-	expiresAt := w.now.Add(tokenLifetime)
-	w.tokens[value] = installationToken{
+	expiresAt := s.world.now.Add(tokenLifetime)
+	s.world.tokens[value] = installationToken{
 		value:          value,
 		installationID: installationID,
 		repositoryIDs:  copySet(repositoryIDs),
 		permissions:    copyMap(permissions),
 		expiresAt:      expiresAt,
 	}
-	w.mutations++
+	s.world.mutations++
 
 	repositories := make([]*github.Repository, 0, len(repositoryIDs))
 	for id := range repositoryIDs {
-		repo := w.repositories[id]
+		repo := s.world.repositories[id]
 		owner := github.User{Login: new(repo.owner)}
 		repositories = append(repositories, &github.Repository{
 			ID:       new(repo.id),
@@ -179,46 +188,41 @@ func (w *world) createInstallationToken(response http.ResponseWriter, request *h
 		})
 	}
 	wirePermissions := permissionsToGitHub(permissions)
-	payload := github.InstallationToken{
+	payload := &github.InstallationToken{
 		Token:        new(value),
 		ExpiresAt:    &github.Timestamp{Time: expiresAt},
 		Permissions:  &wirePermissions,
 		Repositories: repositories,
 	}
-	writeJSON(response, http.StatusCreated, payload)
+	return payload, githubAPIResponse(http.StatusCreated), nil
 }
 
-func (w *world) getPullRequest(response http.ResponseWriter, request *http.Request, owner, name, rawNumber string) {
-	number, err := strconv.Atoi(rawNumber)
-	if err != nil {
-		writeError(response, http.StatusNotFound, "Not Found")
-		return
-	}
+type pullRequestsService struct {
+	githubserver.UnimplementedPullRequestsService
+	world *world
+}
 
-	token, authOK := w.authenticateInstallationToken(request)
+func (s pullRequestsService) Get(ctx context.Context, owner, name string, number int) (*github.PullRequest, *github.Response, error) {
+	token, authOK := installationTokenFromContext(ctx)
 	if !authOK {
-		writeError(response, http.StatusUnauthorized, "Bad credentials")
-		return
+		return nil, nil, githubAPIError(http.StatusUnauthorized, "Bad credentials")
 	}
 
-	w.mu.RLock()
-	repositoryID, found := w.repoNames[repoName(owner, name)]
+	s.world.mu.RLock()
+	repositoryID, found := s.world.repoNames[repoName(owner, name)]
 	if !found {
-		w.mu.RUnlock()
-		writeError(response, http.StatusNotFound, "Not Found")
-		return
+		s.world.mu.RUnlock()
+		return nil, nil, githubAPIError(http.StatusNotFound, "Not Found")
 	}
 	if _, allowed := token.repositoryIDs[repositoryID]; !allowed || !canReadPulls(token.permissions) {
-		w.mu.RUnlock()
-		writeError(response, http.StatusNotFound, "Not Found")
-		return
+		s.world.mu.RUnlock()
+		return nil, nil, githubAPIError(http.StatusNotFound, "Not Found")
 	}
-	repository := w.repositories[repositoryID]
-	pull, found := w.pulls[pullKey{repositoryID: repositoryID, number: number}]
-	w.mu.RUnlock()
+	repository := s.world.repositories[repositoryID]
+	pull, found := s.world.pulls[pullKey{repositoryID: repositoryID, number: number}]
+	s.world.mu.RUnlock()
 	if !found {
-		writeError(response, http.StatusNotFound, "Not Found")
-		return
+		return nil, nil, githubAPIError(http.StatusNotFound, "Not Found")
 	}
 
 	baseSHA := resolveRef(repository.gitDir, pull.baseRef)
@@ -236,7 +240,7 @@ func (w *world) getPullRequest(response http.ResponseWriter, request *http.Reque
 		FullName: new(repository.owner + "/" + repository.name),
 		Owner:    &github.User{Login: new(repository.owner)},
 	}
-	payload := github.PullRequest{
+	payload := &github.PullRequest{
 		Number: new(pull.number),
 		State:  new(pull.state),
 		Draft:  new(pull.draft),
@@ -251,12 +255,11 @@ func (w *world) getPullRequest(response http.ResponseWriter, request *http.Reque
 			Repo: &repo,
 		},
 	}
-	writeJSON(response, http.StatusOK, payload)
+	return payload, githubAPIResponse(http.StatusOK), nil
 }
 
-func (w *world) authenticateAppJWT(request *http.Request) (int64, bool) {
-	raw, found := bearerToken(request)
-	if !found {
+func (w *world) authenticateAppJWT(raw string) (int64, bool) {
+	if raw == "" {
 		return 0, false
 	}
 	claims := jwt.RegisteredClaims{}
@@ -290,12 +293,7 @@ func (w *world) authenticateAppJWT(request *http.Request) (int64, bool) {
 	return appID, err == nil
 }
 
-func (w *world) authenticateInstallationToken(request *http.Request) (installationToken, bool) {
-	scheme, raw, found := strings.Cut(request.Header.Get("Authorization"), " ")
-	found = found && raw != "" && (strings.EqualFold(scheme, "Bearer") || strings.EqualFold(scheme, "token"))
-	if !found {
-		return installationToken{}, false
-	}
+func (w *world) authenticateInstallationToken(raw string) (installationToken, bool) {
 	w.mu.RLock()
 	token, found := w.tokens[raw]
 	now := w.now
@@ -303,15 +301,68 @@ func (w *world) authenticateInstallationToken(request *http.Request) (installati
 	return token, found && now.Before(token.expiresAt)
 }
 
-func bearerToken(request *http.Request) (string, bool) {
-	scheme, value, found := strings.Cut(request.Header.Get("Authorization"), " ")
-	return value, found && strings.EqualFold(scheme, "Bearer") && value != ""
+type installationTokenContextKey struct{}
+
+func installationTokenFromContext(ctx context.Context) (installationToken, bool) {
+	token, ok := ctx.Value(installationTokenContextKey{}).(installationToken)
+	return token, ok
 }
 
-func decodeOptionalJSON(request *http.Request, target any) error {
-	decoder := json.NewDecoder(io.LimitReader(request.Body, 1<<20))
+func authorizationCredential(request *http.Request) (string, bool) {
+	parts := strings.Fields(request.Header.Get("Authorization"))
+	if len(parts) != 2 || (!strings.EqualFold(parts[0], "Bearer") && !strings.EqualFold(parts[0], "token")) {
+		return "", false
+	}
+	return parts[1], true
+}
+
+func isInstallationTokenRequest(request *http.Request) bool {
+	if request.Method != http.MethodPost {
+		return false
+	}
+	parts := restPathParts(request.URL.Path)
+	return len(parts) == 4 && parts[0] == "app" && parts[1] == "installations" && parts[3] == "access_tokens"
+}
+
+func hasMalformedNumericPath(request *http.Request) bool {
+	parts := restPathParts(request.URL.Path)
+	switch {
+	case request.Method == http.MethodPost && len(parts) == 4 && parts[0] == "app" && parts[1] == "installations" && parts[3] == "access_tokens":
+		_, err := strconv.ParseInt(parts[2], 10, 64)
+		return err != nil
+	case request.Method == http.MethodGet && len(parts) == 5 && parts[0] == "repos" && parts[3] == "pulls":
+		_, err := strconv.Atoi(parts[4])
+		return err != nil
+	case request.Method == http.MethodPost && len(parts) == 7 && parts[0] == "repos" && parts[3] == "actions" && parts[4] == "runs" && parts[6] == "cancel":
+		_, err := strconv.ParseInt(parts[5], 10, 64)
+		return err != nil
+	default:
+		return false
+	}
+}
+
+func restPathParts(path string) []string {
+	if path == "/api/v3" {
+		path = "/"
+	} else if strings.HasPrefix(path, "/api/v3/") {
+		path = strings.TrimPrefix(path, "/api/v3")
+	}
+	return strings.Split(strings.TrimPrefix(path, "/"), "/")
+}
+
+func validateInstallationTokenBody(request *http.Request) error {
+	body, err := io.ReadAll(io.LimitReader(request.Body, 1<<20+1))
+	if err != nil {
+		return err
+	}
+	request.Body = io.NopCloser(bytes.NewReader(body))
+	if len(body) > 1<<20 {
+		return errors.New("request body exceeds limit")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
-	err := decoder.Decode(target)
+	var options github.InstallationTokenOptions
+	err = decoder.Decode(&options)
 	if errors.Is(err, io.EOF) {
 		return nil
 	}
@@ -403,7 +454,7 @@ func randomToken() (string, error) {
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err
 	}
-	return base64.RawURLEncoding.EncodeToString(bytes), nil
+	return "ghs_" + base64.RawURLEncoding.EncodeToString(bytes), nil
 }
 
 func copyMap(input map[string]string) map[string]string {
@@ -442,10 +493,38 @@ func writeError(response http.ResponseWriter, status int, message string) {
 	})
 }
 
-func (w *world) handleUnsupported(response http.ResponseWriter, request *http.Request) {
+func githubAPIResponse(status int) *github.Response {
+	return &github.Response{Response: &http.Response{
+		StatusCode: status,
+		Header: http.Header{
+			"Content-Type":                  []string{"application/json; charset=utf-8"},
+			"X-GitHub-Api-Version-Selected": []string{"2022-11-28"},
+			"X-GitHub-Request-Id":           []string{"DTU"},
+		},
+	}}
+}
+
+func githubAPIError(status int, message string) error {
+	return &github.ErrorResponse{
+		Response:         githubAPIResponse(status).Response,
+		Message:          message,
+		DocumentationURL: "https://docs.github.com/rest",
+	}
+}
+
+type unsupportedRequestKey struct{}
+
+func (w *world) recordUnsupported(request *http.Request) {
+	if unsupported, ok := request.Context().Value(unsupportedRequestKey{}).(*bool); ok {
+		*unsupported = true
+	}
 	w.mu.Lock()
 	w.unsupported = append(w.unsupported, UnsupportedRequest{Method: request.Method, Path: request.URL.Path, At: w.now})
 	w.mu.Unlock()
+}
+
+func (w *world) handleUnsupported(response http.ResponseWriter, request *http.Request) {
+	w.recordUnsupported(request)
 	response.Header().Set("X-DTU-Unsupported", "true")
 	writeError(response, http.StatusNotFound, fmt.Sprintf("Unsupported endpoint: %s %s", request.Method, request.URL.Path))
 }

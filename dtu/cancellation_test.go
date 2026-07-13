@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v89/github"
 	"github.com/tylergannon/merger-herder-validation/dtu"
 )
 
